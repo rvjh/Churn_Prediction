@@ -26,3 +26,5 @@ pytest
 
 ## for style linting
 pylint
+
+## for pre-commit-hooks
