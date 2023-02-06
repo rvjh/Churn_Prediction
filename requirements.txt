@@ -1,0 +1,28 @@
+pandas
+scikit-learn
+jupyter
+seaborn
+matplotlib
+xgboost
+mlflow
+boto3
+hyperopt
+prefect==2.0b5
+numpy
+flask
+jq
+
+## For Monitoring :->
+pymongo
+Werkzeug
+dataclasses
+prometheus-client
+pyyml
+tqdm
+evidently
+
+## For testing
+pytest
+
+## for style linting
+pylint

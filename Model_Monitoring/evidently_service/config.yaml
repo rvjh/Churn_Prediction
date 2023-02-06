@@ -1,0 +1,29 @@
+datasets:
+  capstone:
+    column_mapping:
+      categorical_features:
+        - 'gender'
+        - 'marital_status'
+        - 'card_category'
+      numerical_features:
+        - 'customer_age'
+        - 'dependent_count'
+        - 'education_level'
+        - 'income_category'
+        - 'months_on_book'
+        - 'total_relationship_count'
+        - 'credit_limit'
+        - 'total_revolving_bal'
+    data_format:
+      header: true
+      separator: ','
+    monitors:
+      - data_drift
+    reference_file: ./datasets/credit_card_churn_clean.csv
+service:
+  calculation_period_sec: 2
+  min_reference_size: 30
+  moving_reference: false
+  datasets_path: datasets
+  use_reference: true
+  window_size: 5
