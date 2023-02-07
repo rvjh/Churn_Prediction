@@ -6,7 +6,7 @@ Note: this is a personal project to demonstrate an automated ML infrastructure. 
 
 ## Final architecture:
 
-
+<img width="1337" alt="image" src="https://user-images.githubusercontent.com/3721810/185756770-73bfea67-8455-4e51-9cbf-14e0ceba5909.png">
 
 There is a Prefect orchestrator to run 2 flows on a scheduler basis. The `Hyperoptimization deployment flow` is executed by a `Prefect Agent` by pulling training data from the `AWS S3 feature store`, runs hyperoptimization ML model builds and save each model (around 10 models per run) in the MLFlow model registry. On each run it also finds the most efficient model and it registers it in MlFlow to be ready for deployment.
 
