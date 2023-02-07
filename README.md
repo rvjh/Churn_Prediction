@@ -71,6 +71,211 @@ Source: https://www.kaggle.com/datasets/anwarsan/credit-card-bank-churn
 - [exploratory_data_analysis.ipynb](exploratory_data_analysis/exploratory_data_analysis.ipynb)
 - [model_preparation_analysis](model_preparation_analysis)
 
+### Train Model
+
+- Prepare a model using XGBoost. 
+
+- Input data is split into 66%, 33%, 33% for training, validation and test data.
+
+- Measures MAE, MSE, RMSE.
+
+- Measures % of deviated predictions based on month threshold.
+
+- [model_train.ipynb](model_preparation_analysis/model_train.ipynb)
+
+### Model Registry with MLFlow
+
+- dockerized MLFlow: [Dockerfile-mlflow](mlflow/Dockerfile-mlflow)
+- MLFlow UI: `http://localhost:5051`
+
+<img width="1766" alt="image" src="https://user-images.githubusercontent.com/3721810/185757901-98bab827-cee0-4d8e-ae20-c7ff306db777.png">
+<img width="1760" alt="image" src="https://user-images.githubusercontent.com/3721810/185757723-8de0637a-7a08-4397-b9e1-b0dee629ee04.png">
+
+### Automated hyperoptimization tuning
+
+System is using Prefect to orchestrate DAGs. Every few hours, Prefect Agent will start and read the training data from S3, it will build models using XGBoost by running hyperparameterization on the configurations, generating 50 models and calculating accuracy (rmse) for each of them. All 50 models are registered in the MLFlow model registry experiments. At the end of each run, the best model will be registered in MLFlow as ready for deployment.
+
+- model training Prefect flow: [model_train_flow.py](model_orchestration/model_train_flow.py)
+- dockerized Prefect Server: [Dockerfile-prefect](model_orchestration/Dockerfile-prefect)
+- dockerized Prefect Agent: [Dockerfile-prefect-agent](model_orchestration/Dockerfile-prefect-agent)
+
+- Prefect UI: `http://localhost:4200`
+
+<img width="1446" alt="image" src="https://user-images.githubusercontent.com/3721810/185757784-7a9e8adc-87e5-470b-9c59-89969085dbd1.png">
+
+### Model serving HTTP API and Stream
+
+There are 2 ML service servers. One serving predictions using HTTP API build in Python with Flask. Second serving predictions using AWS Kinesis streams, both consuming and publishing results back.
+
+- model serving using Python Flask HTTP API: [predict-api-server.py](server/predict-api-server.py)
+- model serving using Python and AWS Kinesis Streams: [serve_kinesis.py](server/serve_kinesis.py)
+
+- dockerized Flask API server: [Dockerfile-serve-api](server/Dockerfile-serve-api)
+- dockerized AWS Kinesis server: [Dockerfile-serve-kinesis](server/Dockerfile-serve-kinesis)
+
+### Simulation_business: sending data for realtime prediction
+
+There are 2 Python scripts to simulate business requesting predictions from ML servers. One request data from HTTP API server and another one sending events to `predictions` Kinesis stream and receiving results to `results` Kinesis stream.
+
+- sending data for prediction using HTTP API: [send_data-api.py](simulation_business/send_data-api.py)
+- sending data for prediction using AWS Kinesis Streams: [serve_kinesis.py](simulation_business/serve_kinesis.py)
+
+- dockerized sending data to HTTP API: [Dockerfile-send-data-api](simulation_business/Dockerfile-send-data-api)
+- dockerized sending data to AWS Kinesis Streams: [Dockerfile-send-data-kinesis](simulation_business/Dockerfile-send-data-kinesis)
+
+### Monitoring
+
+There are 3 services for monitoring the model predictions is realtime:
+- [Evidently AI](monitoring/evidently_service/) for calculating data drift. Evidently UI: 
+- Prometheus for collecting monitoring data. Prometheus UI: 
+- Grafana for Dashboards UI. Grafana UI: [http://localhost:3000](http://localhost:3000/d/U54hsxv7k/evidently-data-drift-dashboard?orgId=1&refresh=10s) (default user/pass: admin, admin)
+
+<img width="1784" alt="image" src="https://user-images.githubusercontent.com/3721810/185757624-2cc5c23a-40a7-4d4f-8ad3-3c9cefe08cbb.png">
+
+
+### Reporting
+
+There is a Prefect flow to generate reporting using Evidently: [create_report.py](reporting/create_report.py). This will generate reports every few hours save them in MongoDB and also generate static html pages with all data charts.
+
+Report file example: ...
+
+There is also an Nginx server to expose these html reports.
+
+- Nginx server: [nginx](reporting/nginx/)
+- Nginx address: `http://localhost:8888/`
+
+[Report example](reporting/reports/data_report-2022-08-20_21-00.html)
+
+### Deployment
+
+All containers are put together in docker compose files for easy deployment of the entire infrastructure. Docker-compose if perfect for this project, for a more advanced production environment where each service is deployed in different VM, I recommend using more advance tools.
+
+- Deployment: model training: [docker-compose-model-registry.yml](docker-compose-model-registry.yml)
+- Deployment: model serving: [docker-compose-serve.yml](docker-compose-serve.yml)
+
+All deployment commands are grouped using the Makefile for simplicity of use.
+- [Makefile](Makefile)
+
+The environment variables should be in `.env` file. The Makefile will use one of these: [.env.local](.env.local) or [.env.cloud](.env.cloud).
+
+``` sh
+$> make help
+
+Commands:
+
+run: make run_tests   to run tests locally
+run: make reset_all   to delete all containers and cleanup volumes
+run: make setup-model-registry env=local (or env=cloud)   to start model registry and training containers
+run: make init_aws  to setup and initialize AWS services (uses localstack container)
+run: make apply-model-train-flow   to apply the automated model training DAG 
+run: make setup-model-serve env=local (or env=cloud)   to start the model serving containers
+run: make apply-prediction-reporting   to apply the automated prediction reporting DAG
+run: make stop-serve   to stop the model servers (http api and Stream)
+run: make start-serve env=local   to start the model servers (http api and Stream)
+```
+
+### CI/CD in Cloud
+
+The continuos deployment is done using Github actions. Once a change is made to the repo, the deployment pipeline is triggered. This will restart the model servers to load a new model from the MLFlow model registry. The deployed model is always specified in `.env.cloud` file under `RUN_ID` environment variable.
+
+The pipeline will:
+- run tests 
+- ssh in the cloud virtual machine
+- restart model-server-api and model-server-streams containers
+
+- Github Actions runs: https://github.com/razorcd/mlops-training/actions
+- Github Actions configs: https://github.com/razorcd/mlops-training/blob/main/.github/workflows/github-actions-deployment.yml
+
+# Start infrastructure locally or cloud
+To deploy in the cloud, the steps are similar except: use you cloud VM domain instead of localhost to access the UIs and replace `env=local` with `env=cloud`
+
+- install `docker`, `docker compose`, `make`
+- run `make reset_all` to ensure any existing containers are removed
+
+- run `make setup-model-registry env=local`  to start model training infrastructure
+- open `http://localhost:5051` to see MLFlow UI.
+- run `make init_aws` to setup training data and streams in AWS
+- run `make apply-model-train-flow` to apply model training script to the orchestrator. This will run trainings regularly.
+- open `http://localhost:4200/#deployments`, it will show the `model_tuning_and_uploading` deployment scheduled. Start a `Quick Run` to not wait for the scheduler. This will run the model training pipeline and upload a bunch of models to MLFlow server and register the best model.
+
+- from the MLFlow UI decide which model you want to deploy. Get the Run Id of the model and update `RUN_ID` in `.env.local` file (or `.env.cloud` for cloud deployment)
+- run `make setup-model-serve env=local` to start prediction servers
+
+- request a prediction using http API:
+``` sh
+$> curl -X POST -H 'Content-Type: application/json' http://127.0.0.1:9696/predict -d '{"customer_age":50,"gender":"M","dependent_count":2,"education_level":3,"marital_status":"married","income_category":2,"card_category":"blue","months_on_book":4,"total_relationship_count":3,"credit_limit":4000,"total_revolving_bal":2511}'
+
+{"churn chance":0.5,"model_run_id":"70cc813fa2d64c598e3f5cd93ad674af"}
+```
+
+- run `make apply-prediction-reporting` to apply reporting script to the orchestrator. This will generate reports regularly.
+- open ` `, it will show `evidently_data_reporting` deployment. This runs every 3 hours. The system needs to collect 3+ hours of predictions data first before generating any report. Running the reporting manually at this time will not generate reports yet.
+- open `http://localhost:8888/` to see generated reports after 3+ hours.
+- open `http://localhost:8085/metrics` to see prometheus data. 
+- open `http://localhost:3000/dashboards` to see Grafana realtime monitoring dashboard of data drift. (default user/pass: admin, admin)
+
+
+Optionally:
+- publish to Kinesis. `data` is the request json payload base64 encoded
+``` sh
+aws kinesis put-record \
+    --stream-name predictions --endpoint-url=http://localhost:4566 \
+    --partition-key 1 \
+    --data "ewogICAgICAiY3VzdG9tZXJfYWdlIjogMTAwLAogICAgICAiZ2VuZGVyIjogIkYiLAogICAgICAiZGVwZW5kZW50X2NvdW50IjogMiwKICAgICAgImVkdWNhdGlvbl9sZXZlbCI6IDIsCiAgICAgICJtYXJpdGFsX3N0YXR1cyI6ICJtYXJyaWVkIiwKICAgICAgImluY29tZV9jYXRlZ29yeSI6IDIsCiAgICAgICJjYXJkX2NhdGVnb3J5IjogImJsdWUiLAogICAgICAibW9udGhzX29uX2Jvb2siOiA2LAogICAgICAidG90YWxfcmVsYXRpb25zaGlwX2NvdW50IjogMywKICAgICAgImNyZWRpdF9saW1pdCI6IDQwMDAsCiAgICAgICJ0b3RhbF9yZXZvbHZpbmdfYmFsIjogMjUwMAogICAgfQ=="
+``` 
+
+- consume from Kinesis
+``` sh
+aws kinesis get-shard-iterator  --shard-id shardId-000000000000 --endpoint-url=http://localhost:4566 --shard-iterator-type TRIM_HORIZON --stream-name results --query 'ShardIterator'
+# copy shard iterator without quotes
+
+aws kinesis get-records --endpoint-url=http://localhost:4566 --shard-iterator {SHARD_ITERATOR_HERE}
+# decode Data based64
+```
+
+- run `docker logs -t {container}` to see logs for now
+
+All running containers:
+<img width="1571" alt="image" src="https://user-images.githubusercontent.com/3721810/185755712-4591f7ba-a98e-4f7b-a8a1-231d33e8beea.png">
+
+### Cloud Deployment
+
+The entire infrastructure was deployed in the cloud using virtual machine provided by [Digital Ocean](https://www.digitalocean.com/).
+
+Links:
+- ML Flow model registry: http://188.166.115.79:5051/
+- Prefect orchestrator: http://188.166.115.79:4200/
+- predict using API:
+``` sh
+curl -X POST -H 'Content-Type: application/json' http://188.166.115.79:9696/predict -d '{"customer_age":50,"gender":"M","dependent_count":2,"education_level":3,"marital_status":"married","income_category":2,"card_category":"blue","months_on_book":4,"total_relationship_count":3,"credit_limit":4000,"total_revolving_bal":2511}' 
+{"churn chance":0.5,"model_run_id":"8a19dc8026dc4e4cb972ad84194940fd"}
+```
+- publish to Kinesis. `data` is the request json payload base64 encoded
+``` sh
+aws kinesis put-record \
+    --stream-name predictions --endpoint-url=http://188.166.115.79:4566 \
+    --partition-key 1 \
+    --data "ewogICAgICAiY3VzdG9tZXJfYWdlIjogMTAwLAogICAgICAiZ2VuZGVyIjogIkYiLAogICAgICAiZGVwZW5kZW50X2NvdW50IjogMiwKICAgICAgImVkdWNhdGlvbl9sZXZlbCI6IDIsCiAgICAgICJtYXJpdGFsX3N0YXR1cyI6ICJtYXJyaWVkIiwKICAgICAgImluY29tZV9jYXRlZ29yeSI6IDIsCiAgICAgICJjYXJkX2NhdGVnb3J5IjogImJsdWUiLAogICAgICAibW9udGhzX29uX2Jvb2siOiA2LAogICAgICAidG90YWxfcmVsYXRpb25zaGlwX2NvdW50IjogMywKICAgICAgImNyZWRpdF9saW1pdCI6IDQwMDAsCiAgICAgICJ0b3RhbF9yZXZvbHZpbmdfYmFsIjogMjUwMAogICAgfQ=="
+``` 
+- consume from Kinesis
+``` sh
+aws kinesis get-shard-iterator  --shard-id shardId-000000000000 --endpoint-url=http://188.166.115.79:4566 --shard-iterator-type TRIM_HORIZON --stream-name results --query 'ShardIterator'
+# copy shard iterator without quotes
+
+aws kinesis get-records --endpoint-url=http://188.166.115.79:4566 --shard-iterator {SHARD_ITERATOR_HERE}
+# decode Data based64
+```
+- Prometheus UI: http://188.166.115.79:8085/metrics
+- Grafana Dashboard UI: http://188.166.115.79:3000/dashboards   (user/pass: admin, admin)
+- Reports folder: http://188.166.115.79:8888/   (only after first 3 hours after deployment)
+- Github Actions pipeline: https://github.com/razorcd/mlops-training/actions
+
+### Other useful links:
+
+- Github Actions: add ssh keys from server: https://zellwk.com/blog/github-actions-deploy/
+
+
+
 
 
 
