@@ -1,0 +1,14 @@
+FROM python:3.9-slim
+
+RUN pip install --no-cache-dir prefect==2.0b5
+
+COPY requirements.txt .
+
+RUN pip install -r requirements.txt
+
+
+RUN mkdir /tmp/store
+
+EXPOSE 4200
+
+CMD prefect config set PREFECT_ORION_UI_API_URL="http://65.1.85.183:4200/api" && prefect orion start --host 0.0.0.0
