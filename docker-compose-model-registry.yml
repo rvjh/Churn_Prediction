@@ -1,0 +1,67 @@
+version: '3.9
+services:
+    mlflow_server:
+      restart: always
+      build:
+        context: ./Experiment_Tracking
+        dockerfile: Dockerfile-mlflow
+      image: mlflow_server
+      container_name: mlflow_server
+      ports:
+        - 5051:5000
+      networks:
+        - backend
+      volumes:
+        - /tmp/mlopsdb:/tmp/mlopsdb
+        - /tmp/mlopsartifacts:/tmp/mlopsartifacts
+        - /tmp/store:/tmp/store
+
+    prefect_server:
+      restart: always
+      build:
+        context: ./Model_Orchestration
+        dockerfile: Dockerfile-prefect
+      logging:
+        driver: none
+      image: "prefect_server"
+      container_name: "prefect_server"
+      ports:
+        - "4200:4200"
+        - "8080:8080"
+      env_file:
+        - .env
+      networks:
+        - backend
+      volumes:
+        - /tmp/mlopsdb:/tmp/mlopsdb
+        - /tmp/mlopsartifacts:/tmp/mlopsartifacts
+        - /tmp/store:/tmp/store
+
+    agent:
+      restart: always
+      depends_on:
+        - prefect_server
+        - mlflow_server
+      build:
+        context: ./Model_Orchestration
+        dockerfile: Dockerfile-prefect-agent
+      image: "prefect_agent_1"
+      container_name: "prefect_agent_1"
+      environment:
+        REPORT_TIME_WINDOW_MINUTES: 180
+        REPORTS_FOLDER: /tmp/mlreports
+        MONGODB_ADDRESS: mongodb://mongo.:27017/
+      volumes:
+        - /tmp/mlopsdb:/tmp/mlopsdb
+        - /tmp/mlopsartifacts:/tmp/mlopsartifacts
+        - /tmp/store:/tmp/store
+        - /tmp/mlreports:/tmp/mlreports
+      networks:
+        - backend
+
+
+networks:
+    backend:
+        driver: bridge
+    external:
+        driver: bridge
