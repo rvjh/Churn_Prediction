@@ -1,0 +1,15 @@
+FROM python:3.9-slim
+
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+RUN unzip awscliv2.zip
+RUN sh ./aws/install
+
+COPY Model_Deployment/Streaming/lambda_function_stream_kinesis.py .
+COPY model_prediction.py .
+COPY model_loading.py .
+
+
+CMD python Model_Deployment/Streaming/lambda_function_stream_kinesis.py
