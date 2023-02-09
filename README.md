@@ -174,15 +174,15 @@ run: make reset_all   to delete all containers and cleanup volumes
 run: make setup-model-registry env=local (or env=cloud)   to start model registry and training containers
 run: make init_aws  to setup and initialize AWS services (uses localstack container)
 run: make apply-model-train-flow   to apply the automated model training DAG 
-run: make setup-model-serve env=local (or env=cloud)   to start the model serving containers
+run: make setup-model-serve env=cloud   to start the model serving containers
 run: make apply-prediction-reporting   to apply the automated prediction reporting DAG
 run: make stop-serve   to stop the model servers (http api and Stream)
-run: make start-serve env=local   to start the model servers (http api and Stream)
+run: make start-serve env=cloud   to start the model servers (http api and Stream)
 ```
 
 ### CI/CD in Cloud
 
-The continuos deployment is done using Github actions. Once a change is made to the repo, the deployment pipeline is triggered. This will restart the model servers to load a new model from the MLFlow model registry. The deployed model is always specified in `.env.cloud` file under `RUN_ID` environment variable.
+The continues deployment is done using Github actions. Once a change is made to the repo, the deployment pipeline is triggered. This will restart the model servers to load a new model from the MLFlow model registry. The deployed model is always specified in `.env.cloud` file under `RUN_ID` environment variable.
 
 The pipeline will:
 - run tests 
